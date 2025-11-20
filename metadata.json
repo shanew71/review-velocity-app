@@ -1,0 +1,5 @@
+{
+  "name": "ReviewVelocity Widget",
+  "description": "A specialized business dashboard that aggregates review data and renders it in AI-readable Schema.org JSON-LD format to optimize for LLM search visibility.",
+  "requestFramePermissions": []
+}
