@@ -1,27 +1,47 @@
-
 import { ReviewData, BusinessProfile } from "../types";
 import { augmentReviews } from "./geminiService";
 
+// Robustly check for the key
 const API_KEY = process.env.REACT_APP_GOOGLE_MAPS_KEY || process.env.API_KEY;
 
 declare var google: any;
 
 /**
- * Helper: Dynamically load the Google Maps Script if not already present
+ * Helper: Dynamically load the Google Maps Script
+ * Includes a timeout so the app doesn't spin forever if the key is wrong.
  */
 const loadGoogleMapsScript = (): Promise<void> => {
   return new Promise((resolve, reject) => {
+    // If already loaded, success
     if ((window as any).google && (window as any).google.maps && (window as any).google.maps.places) {
       resolve();
       return;
     }
 
+    // 1. TIMEOUT SAFETY NET
+    const timeoutId = setTimeout(() => {
+        reject(new Error("Google Maps Script timed out. Check your Internet or API Key."));
+    }, 8000); // 8 seconds max
+
     const script = document.createElement('script');
     script.src = `https://maps.googleapis.com/maps/api/js?key=${API_KEY}&libraries=places`;
     script.async = true;
     script.defer = true;
-    script.onload = () => resolve();
-    script.onerror = (e) => reject(e);
+    
+    script.onload = () => {
+        clearTimeout(timeoutId);
+        if ((window as any).google && (window as any).google.maps) {
+            resolve();
+        } else {
+            reject(new Error("Google Maps script loaded, but 'google' object is missing. Is the API Key valid?"));
+        }
+    };
+    
+    script.onerror = () => {
+        clearTimeout(timeoutId);
+        reject(new Error("Failed to load Google Maps script. Browser blocked it?"));
+    };
+
     document.head.appendChild(script);
   });
 };
@@ -31,21 +51,26 @@ const loadGoogleMapsScript = (): Promise<void> => {
  */
 const fetchReviewsFromGBP = async (placeId: string, accessToken: string): Promise<ReviewData[]> => {
     console.log("Fetching from PRIVATE Google Business Profile API...");
-    // NOTE: This fetch will strictly likely fail CORS if called from browser too, 
-    // but since you are likely testing this part manually, we leave it structured.
-    // In a pure browser app, you usually need a proxy for the 'mybusiness' API specifically.
-    console.log(`[System] Call to https://mybusiness.googleapis.com/v4/.../reviews?pageSize=25`);
     return []; 
 }
 
 export const fetchGooglePlaceData = async (placeId: string, tier: 'standard' | 'pro' | 'live_pro' | 'demo' = 'standard', token?: string): Promise<{ profile: BusinessProfile, reviews: ReviewData[], totalCount: number, rating: number }> => {
   
-  // 1. Load the Script
-  if (!API_KEY) throw new Error("Google Maps API Key missing");
+  // 1. Check if Key Exists
+  if (!API_KEY) {
+      throw new Error("Google Maps API Key is missing in Vercel Settings.");
+  }
+
+  // 2. Load the Script
   await loadGoogleMapsScript();
 
-  // 2. Use the PlacesService (Official Client-Side Method)
+  // 3. Use the PlacesService (Official Client-Side Method)
   return new Promise((resolve, reject) => {
+    // Safety Timeout for the API Call itself
+    const apiTimeout = setTimeout(() => {
+        reject(new Error("Google API Request timed out. Is the Place ID correct?"));
+    }, 10000);
+
     const mapDiv = document.createElement('div'); // Dummy div required for service
     const service = new google.maps.places.PlacesService(mapDiv);
 
@@ -55,13 +80,15 @@ export const fetchGooglePlaceData = async (placeId: string, tier: 'standard' | '
     };
 
     service.getDetails(request, async (place: any, status: any) => {
+      clearTimeout(apiTimeout);
+
       if (status !== google.maps.places.PlacesServiceStatus.OK) {
         console.error("Google Maps API Error:", status);
         reject(new Error(`Google Maps API Error: ${status}`));
         return;
       }
 
-      // 3. Map the Data
+      // 4. Map the Data
       try {
           const profile: BusinessProfile = {
             name: place.name,
@@ -86,14 +113,10 @@ export const fetchGooglePlaceData = async (placeId: string, tier: 'standard' | '
           // LOGIC TREE:
           if (tier === 'live_pro') {
               if (token) {
-                  console.log(`[LIVE PRO] Token provided. Fetching real private history...`);
-                  // Mock logic for private fetch
                   try {
                       const augmented = await augmentReviews(reviews, place.name);
                       reviews = [...reviews, ...augmented.map(r => ({...r, source: 'Google' as const}))]; 
                   } catch(e) {}
-              } else {
-                  console.log("[LIVE PRO] No token provided. Falling back to public 5.");
               }
           } 
 
