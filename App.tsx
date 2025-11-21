@@ -10,15 +10,19 @@ const INITIAL_PROFILE: BusinessProfile = {
   name: "Connect Your Business",
   url: "#",
   logoUrl: "https://ui-avatars.com/api/?name=RV",
-  description: "Enter a Business Name or Place ID to generate live intelligence.",
+  description: "Enter a Google Place ID to generate live intelligence.",
 };
 
 const App: React.FC = () => {
+  // View Mode State
   const [viewMode, setViewMode] = useState<ViewMode>('dashboard');
+  
+  // Data State
   const [profile, setProfile] = useState<BusinessProfile>(INITIAL_PROFILE);
   const [reviews, setReviews] = useState<ReviewData[]>([]);
   const [stats, setStats] = useState<BusinessStats | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
+  
   const [connectionTier, setConnectionTier] = useState<'demo' | 'live_pro'>('demo');
   
   const [placeIdInput, setPlaceIdInput] = useState('');
@@ -27,6 +31,7 @@ const App: React.FC = () => {
   const [embedType, setEmbedType] = useState<'static' | 'live'>('static');
   const [showEmbedModal, setShowEmbedModal] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  
   const [showImportModal, setShowImportModal] = useState(false);
   const [rawReviewText, setRawReviewText] = useState('');
 
@@ -53,7 +58,6 @@ const App: React.FC = () => {
     setStats(null);
 
     try {
-      // Input can now be Name, Link, or ID
       const placeData = await fetchGooglePlaceData(input, tier, token);
 
       setProfile(placeData.profile);
@@ -71,7 +75,12 @@ const App: React.FC = () => {
     } catch (err: any) {
       console.error(err);
       const msg = err.message || "Failed to load business data";
-      setErrorMsg(msg);
+      
+      if (msg.includes("CORS")) {
+          setErrorMsg("Browser Blocked Request. We are switching to JS API to fix this...");
+      } else {
+          setErrorMsg(`Error: ${msg}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -168,6 +177,8 @@ const App: React.FC = () => {
             <h1 className="text-2xl font-bold text-slate-900 mb-4">Configure Client Widget</h1>
             <p className="text-slate-500 mb-6 text-sm">
               Enter the client's <strong>Business Name</strong> or <strong>Place ID</strong> to begin.
+              <br/>
+              <a href="https://developers.google.com/maps/documentation/places/web-service/place-id" target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">Find a Place ID here</a>.
             </p>
             
             {errorMsg && (
@@ -299,6 +310,7 @@ const App: React.FC = () => {
           <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full flex flex-col max-h-[90vh]">
             <div className="p-6 border-b border-slate-100">
               <h3 className="text-lg font-bold mb-4">Client Embed Code</h3>
+              
               <div className="flex bg-slate-100 rounded-lg p-1 gap-1">
                   <button 
                     onClick={() => setEmbedType('static')}
@@ -313,6 +325,7 @@ const App: React.FC = () => {
                       🔴 Live Auto-Pilot (Requires Deployment)
                   </button>
               </div>
+              
               <p className="mt-4 text-xs text-slate-500">
                   {embedType === 'static' 
                     ? "Generates a standalone HTML block with current data. Does not call any API. Update monthly."
@@ -340,6 +353,7 @@ const App: React.FC = () => {
           </div>
         </div>
       )}
+
     </div>
   );
 };
