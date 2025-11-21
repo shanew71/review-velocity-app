@@ -19,7 +19,7 @@ const loadGoogleMapsScript = (): Promise<void> => {
 
     // TIMEOUT: If script doesn't load in 8 seconds, fail.
     const timeoutId = setTimeout(() => {
-        reject(new Error("Google Maps Script load timed out. Check internet or API Key restrictions."));
+        reject(new Error("Google Maps Script load timed out. Check internet or API Key restriction."));
     }, 8000);
 
     const script = document.createElement('script');
@@ -47,44 +47,7 @@ const loadGoogleMapsScript = (): Promise<void> => {
   });
 };
 
-/**
- * INTERNAL HELPER: Resolve 'Input' to 'Place ID'
- * If the user types a name or URL, we find the ID first.
- */
-const resolveToPlaceId = (input: string, service: any): Promise<string> => {
-    return new Promise((resolve, reject) => {
-        // 1. If it looks like a Place ID (starts with ChIJ), use it directly
-        if (input.trim().startsWith('ChIJ')) {
-            resolve(input.trim());
-            return;
-        }
-
-        console.log("Searching for Place ID via text query:", input);
-        
-        // SAFETY TIMEOUT for Search
-        const searchTimeout = setTimeout(() => {
-             reject(new Error("Search timed out. Ensure your Google Maps API Key has 'Billing' enabled."));
-        }, 5000);
-
-        const request = {
-            query: input,
-            fields: ['place_id', 'name'],
-        };
-
-        service.findPlaceFromQuery(request, (results: any[], status: any) => {
-            clearTimeout(searchTimeout);
-            if (status === google.maps.places.PlacesServiceStatus.OK && results && results.length > 0) {
-                console.log("Found Place ID:", results[0].place_id);
-                resolve(results[0].place_id);
-            } else {
-                console.error("Search failed:", status);
-                reject(new Error(`Could not find business "${input}". Status: ${status}`));
-            }
-        });
-    });
-};
-
-export const fetchGooglePlaceData = async (input: string, tier: 'standard' | 'pro' | 'live_pro' | 'demo' = 'standard', token?: string): Promise<{ profile: BusinessProfile, reviews: ReviewData[], totalCount: number, rating: number }> => {
+export const fetchGooglePlaceData = async (placeId: string, tier: 'standard' | 'pro' | 'live_pro' | 'demo' = 'standard', token?: string): Promise<{ profile: BusinessProfile, reviews: ReviewData[], totalCount: number, rating: number }> => {
   
   // 1. Check Key
   if (!API_KEY) throw new Error("Google Maps API Key is missing.");
@@ -97,31 +60,28 @@ export const fetchGooglePlaceData = async (input: string, tier: 'standard' | 'pr
     const service = new google.maps.places.PlacesService(mapDiv);
 
     try {
-        // 3. Resolve Input -> Place ID (This fixes the Name Search)
-        const placeId = await resolveToPlaceId(input, service);
-
-        // 4. Get Details using the resolved ID
+        // 3. Get Details using the ID directly
         const request = {
-          placeId: placeId,
+          placeId: placeId.trim(),
           fields: ['name', 'formatted_address', 'formatted_phone_number', 'website', 'rating', 'user_ratings_total', 'reviews', 'types', 'place_id']
         };
 
         // TIMEOUT: If API doesn't respond in 10 seconds, fail.
         const apiTimeout = setTimeout(() => {
-            reject(new Error("Google API Request timed out. check API Key Billing status."));
+            reject(new Error("Google API Request timed out. Check API Key Billing status."));
         }, 10000);
 
         service.getDetails(request, async (place: any, status: any) => {
           clearTimeout(apiTimeout);
 
           if (status !== google.maps.places.PlacesServiceStatus.OK) {
-            if (status === 'ZERO_RESULTS') reject(new Error("Place ID not found in Google Database."));
+            if (status === 'ZERO_RESULTS') reject(new Error("Place ID not found. Please check the ID."));
             else if (status === 'REQUEST_DENIED') reject(new Error("API Key Rejected. Check Google Cloud Console."));
             else reject(new Error(`Google Maps API Error: ${status}`));
             return;
           }
 
-          // 5. Map Data
+          // 4. Map Data
           try {
               const profile: BusinessProfile = {
                 name: place.name,
