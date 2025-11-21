@@ -8,20 +8,13 @@ declare var google: any;
 
 /**
  * Helper: Dynamically load the Google Maps Script
- * Includes a timeout so the app doesn't spin forever if the key is wrong.
  */
 const loadGoogleMapsScript = (): Promise<void> => {
   return new Promise((resolve, reject) => {
-    // If already loaded, success
     if ((window as any).google && (window as any).google.maps && (window as any).google.maps.places) {
       resolve();
       return;
     }
-
-    // 1. TIMEOUT SAFETY NET
-    const timeoutId = setTimeout(() => {
-        reject(new Error("Google Maps Script timed out. Check your Internet or API Key restrictions."));
-    }, 8000); // 8 seconds max
 
     const script = document.createElement('script');
     script.src = `https://maps.googleapis.com/maps/api/js?key=${API_KEY}&libraries=places`;
@@ -29,18 +22,18 @@ const loadGoogleMapsScript = (): Promise<void> => {
     script.defer = true;
     
     script.onload = () => {
-        clearTimeout(timeoutId);
-        // Double check that the object actually exists
-        if ((window as any).google && (window as any).google.maps) {
-            resolve();
-        } else {
-            reject(new Error("Google Maps script loaded, but 'google' object is missing."));
-        }
+        // Give it a tiny buffer to initialize
+        setTimeout(() => {
+            if ((window as any).google && (window as any).google.maps) {
+                resolve();
+            } else {
+                reject(new Error("Google Maps script loaded but failed to initialize."));
+            }
+        }, 100);
     };
     
     script.onerror = () => {
-        clearTimeout(timeoutId);
-        reject(new Error("Failed to load Google Maps script. Check API Key or Browser Blockers."));
+        reject(new Error("Failed to load Google Maps script. Check API Key restriction."));
     };
 
     document.head.appendChild(script);
@@ -48,92 +41,110 @@ const loadGoogleMapsScript = (): Promise<void> => {
 };
 
 /**
- * REAL PRODUCTION FUNCTION for fetching private GBP Data
+ * INTERNAL HELPER: Resolve 'Input' to 'Place ID'
+ * If the user types a name or URL, we find the ID first.
  */
-const fetchReviewsFromGBP = async (placeId: string, accessToken: string): Promise<ReviewData[]> => {
-    console.log("Fetching from PRIVATE Google Business Profile API...");
-    return []; 
-}
+const resolveToPlaceId = (input: string, service: any): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        // 1. If it looks like a Place ID (starts with ChIJ), use it directly
+        if (input.startsWith('ChIJ')) {
+            resolve(input);
+            return;
+        }
 
-export const fetchGooglePlaceData = async (placeId: string, tier: 'standard' | 'pro' | 'live_pro' | 'demo' = 'standard', token?: string): Promise<{ profile: BusinessProfile, reviews: ReviewData[], totalCount: number, rating: number }> => {
+        // 2. Otherwise, treat it as a Search Query (Name or Link)
+        console.log("Searching for Place ID via text query:", input);
+        const request = {
+            query: input,
+            fields: ['place_id', 'name'],
+        };
+
+        service.findPlaceFromQuery(request, (results: any[], status: any) => {
+            if (status === google.maps.places.PlacesServiceStatus.OK && results && results.length > 0) {
+                console.log("Found Place ID:", results[0].place_id);
+                resolve(results[0].place_id);
+            } else {
+                console.error("Search failed:", status);
+                reject(new Error(`Could not find a business named "${input}". Try the exact Place ID.`));
+            }
+        });
+    });
+};
+
+export const fetchGooglePlaceData = async (input: string, tier: 'standard' | 'pro' | 'live_pro' | 'demo' = 'standard', token?: string): Promise<{ profile: BusinessProfile, reviews: ReviewData[], totalCount: number, rating: number }> => {
   
-  // 1. Check if Key Exists
-  if (!API_KEY) {
-      throw new Error("Google Maps API Key is missing in Vercel Settings.");
-  }
+  // 1. Check Key
+  if (!API_KEY) throw new Error("Google Maps API Key is missing.");
 
-  // 2. Load the Script
+  // 2. Load Script
   await loadGoogleMapsScript();
 
-  // 3. Use the PlacesService (Official Client-Side Method)
-  return new Promise((resolve, reject) => {
-    // Safety Timeout for the API Call itself
-    const apiTimeout = setTimeout(() => {
-        reject(new Error("Google API Request timed out. Is the Place ID correct?"));
-    }, 10000);
-
-    const mapDiv = document.createElement('div'); // Dummy div required for service
+  return new Promise(async (resolve, reject) => {
+    const mapDiv = document.createElement('div');
     const service = new google.maps.places.PlacesService(mapDiv);
 
-    const request = {
-      placeId: placeId,
-      fields: ['name', 'formatted_address', 'formatted_phone_number', 'website', 'rating', 'user_ratings_total', 'reviews', 'types', 'place_id']
-    };
+    try {
+        // 3. Resolve Input -> Place ID
+        const placeId = await resolveToPlaceId(input, service);
 
-    service.getDetails(request, async (place: any, status: any) => {
-      clearTimeout(apiTimeout);
+        // 4. Get Details using the resolved ID
+        const request = {
+          placeId: placeId,
+          fields: ['name', 'formatted_address', 'formatted_phone_number', 'website', 'rating', 'user_ratings_total', 'reviews', 'types', 'place_id']
+        };
 
-      if (status !== google.maps.places.PlacesServiceStatus.OK) {
-        console.error("Google Maps API Error:", status);
-        // Give a user-friendly error for common codes
-        if (status === 'ZERO_RESULTS') reject(new Error("Place ID not found."));
-        else if (status === 'REQUEST_DENIED') reject(new Error("API Key Rejected. Check Google Cloud Console."));
-        else reject(new Error(`Google Maps API Error: ${status}`));
-        return;
-      }
+        service.getDetails(request, async (place: any, status: any) => {
+          if (status !== google.maps.places.PlacesServiceStatus.OK) {
+            // Specific error handling
+            if (status === 'ZERO_RESULTS') reject(new Error("Place ID not found."));
+            else if (status === 'REQUEST_DENIED') reject(new Error("API Key Rejected. Check Google Cloud Console settings."));
+            else reject(new Error(`Google Maps API Error: ${status}`));
+            return;
+          }
 
-      // 4. Map the Data
-      try {
-          const profile: BusinessProfile = {
-            name: place.name,
-            url: place.website || `https://www.google.com/maps/place/?q=place_id:${place.place_id}`,
-            description: `${place.name} is a local business located in ${place.formatted_address}.`,
-            logoUrl: `https://ui-avatars.com/api/?name=${place.name.replace(/ /g, '+')}&background=random`,
-            address: place.formatted_address,
-            telephone: place.formatted_phone_number,
-            googlePlaceId: place.place_id,
-            categories: place.types || []
-          };
+          // 5. Map Data
+          try {
+              const profile: BusinessProfile = {
+                name: place.name,
+                url: place.website || `https://www.google.com/maps/place/?q=place_id:${place.place_id}`,
+                description: `${place.name} is a local business located in ${place.formatted_address}.`,
+                logoUrl: `https://ui-avatars.com/api/?name=${place.name.replace(/ /g, '+')}&background=random`,
+                address: place.formatted_address,
+                telephone: place.formatted_phone_number,
+                googlePlaceId: place.place_id,
+                categories: place.types || []
+              };
 
-          let reviews: ReviewData[] = (place.reviews || []).map((r: any, idx: number) => ({
-            id: `g-${idx}-${Date.now()}`,
-            author: r.author_name,
-            rating: r.rating,
-            text: r.text,
-            date: new Date(r.time * 1000).toISOString(),
-            source: 'Google'
-          }));
+              let reviews: ReviewData[] = (place.reviews || []).map((r: any, idx: number) => ({
+                id: `g-${idx}-${Date.now()}`,
+                author: r.author_name,
+                rating: r.rating,
+                text: r.text,
+                date: new Date(r.time * 1000).toISOString(),
+                source: 'Google'
+              }));
 
-          // LOGIC TREE:
-          if (tier === 'live_pro') {
-              if (token) {
+              if (tier === 'live_pro' && token) {
                   try {
                       const augmented = await augmentReviews(reviews, place.name);
                       reviews = [...reviews, ...augmented.map(r => ({...r, source: 'Google' as const}))]; 
                   } catch(e) {}
-              }
-          } 
+              } 
 
-          resolve({
-            profile,
-            reviews,
-            totalCount: place.user_ratings_total || 0,
-            rating: place.rating || 0
-          });
+              resolve({
+                profile,
+                reviews,
+                totalCount: place.user_ratings_total || 0,
+                rating: place.rating || 0
+              });
 
-      } catch (err) {
-          reject(err);
-      }
-    });
+          } catch (err) {
+              reject(err);
+          }
+        });
+
+    } catch (error) {
+        reject(error);
+    }
   });
 };
