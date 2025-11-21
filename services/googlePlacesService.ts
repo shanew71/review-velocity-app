@@ -19,7 +19,7 @@ const loadGoogleMapsScript = (): Promise<void> => {
 
     // TIMEOUT: If script doesn't load in 8 seconds, fail.
     const timeoutId = setTimeout(() => {
-        reject(new Error("Google Maps Script load timed out. Check internet or API Key restriction."));
+        reject(new Error("Google Maps Script load timed out. Check internet or API Key restrictions."));
     }, 8000);
 
     const script = document.createElement('script');
@@ -59,21 +59,26 @@ const resolveToPlaceId = (input: string, service: any): Promise<string> => {
             return;
         }
 
-        // 2. Otherwise, treat it as a Search Query (Name or Link)
         console.log("Searching for Place ID via text query:", input);
+        
+        // SAFETY TIMEOUT for Search
+        const searchTimeout = setTimeout(() => {
+             reject(new Error("Search timed out. Ensure your Google Maps API Key has 'Billing' enabled."));
+        }, 5000);
+
         const request = {
             query: input,
             fields: ['place_id', 'name'],
         };
 
         service.findPlaceFromQuery(request, (results: any[], status: any) => {
+            clearTimeout(searchTimeout);
             if (status === google.maps.places.PlacesServiceStatus.OK && results && results.length > 0) {
                 console.log("Found Place ID:", results[0].place_id);
                 resolve(results[0].place_id);
             } else {
-                // Pass the exact status back so we know why it failed
                 console.error("Search failed:", status);
-                reject(new Error(`Could not find business "${input}". Try the exact Place ID.`));
+                reject(new Error(`Could not find business "${input}". Status: ${status}`));
             }
         });
     });
@@ -103,7 +108,7 @@ export const fetchGooglePlaceData = async (input: string, tier: 'standard' | 'pr
 
         // TIMEOUT: If API doesn't respond in 10 seconds, fail.
         const apiTimeout = setTimeout(() => {
-            reject(new Error("Google API Request timed out."));
+            reject(new Error("Google API Request timed out. check API Key Billing status."));
         }, 10000);
 
         service.getDetails(request, async (place: any, status: any) => {
