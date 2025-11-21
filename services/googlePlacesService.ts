@@ -20,7 +20,7 @@ const loadGoogleMapsScript = (): Promise<void> => {
 
     // 1. TIMEOUT SAFETY NET
     const timeoutId = setTimeout(() => {
-        reject(new Error("Google Maps Script timed out. Check your Internet or API Key."));
+        reject(new Error("Google Maps Script timed out. Check your Internet or API Key restrictions."));
     }, 8000); // 8 seconds max
 
     const script = document.createElement('script');
@@ -30,16 +30,17 @@ const loadGoogleMapsScript = (): Promise<void> => {
     
     script.onload = () => {
         clearTimeout(timeoutId);
+        // Double check that the object actually exists
         if ((window as any).google && (window as any).google.maps) {
             resolve();
         } else {
-            reject(new Error("Google Maps script loaded, but 'google' object is missing. Is the API Key valid?"));
+            reject(new Error("Google Maps script loaded, but 'google' object is missing."));
         }
     };
     
     script.onerror = () => {
         clearTimeout(timeoutId);
-        reject(new Error("Failed to load Google Maps script. Browser blocked it?"));
+        reject(new Error("Failed to load Google Maps script. Check API Key or Browser Blockers."));
     };
 
     document.head.appendChild(script);
@@ -84,7 +85,10 @@ export const fetchGooglePlaceData = async (placeId: string, tier: 'standard' | '
 
       if (status !== google.maps.places.PlacesServiceStatus.OK) {
         console.error("Google Maps API Error:", status);
-        reject(new Error(`Google Maps API Error: ${status}`));
+        // Give a user-friendly error for common codes
+        if (status === 'ZERO_RESULTS') reject(new Error("Place ID not found."));
+        else if (status === 'REQUEST_DENIED') reject(new Error("API Key Rejected. Check Google Cloud Console."));
+        else reject(new Error(`Google Maps API Error: ${status}`));
         return;
       }
 
