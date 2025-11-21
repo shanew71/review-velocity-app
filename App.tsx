@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { ReviewWidget } from './components/ReviewWidget';
 import { SchemaMarkup } from './components/SchemaMarkup';
@@ -25,8 +24,6 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   
   // Config State
-  // 'demo' = Standard Audit (Public 5 Reviews)
-  // 'live_pro' = Client Mode (Real 25 Reviews via Token)
   const [connectionTier, setConnectionTier] = useState<'demo' | 'live_pro'>('demo');
   
   // Input State
@@ -51,8 +48,6 @@ const App: React.FC = () => {
     if (modeParam === 'widget') {
       setViewMode('widget');
       if (placeIdParam) {
-        // Widget Mode: Default to 'standard' (Safe Public Data) unless a token is provided for Real Pro data.
-        // Note: In widget mode, 'demo' acts as standard public fetch.
         const tier = tokenParam ? 'live_pro' : 'demo';
         loadPlaceData(placeIdParam, tier, tokenParam || undefined); 
       }
@@ -61,17 +56,13 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // 2. Load Data (Auto or Manual)
+  // 2. Load Data
   const loadPlaceData = async (placeId: string, tier: 'demo' | 'live_pro', token?: string) => {
     setLoading(true);
     setErrorMsg(null);
-    
-    // Clear previous data slightly to indicate refresh
     setStats(null);
 
     try {
-      // We intentionally removed the try/catch fallback block. 
-      // If the API fails, we want to see the REAL error, not the Demo Data.
       const placeData = await fetchGooglePlaceData(placeId, tier, token);
 
       setProfile(placeData.profile);
@@ -82,19 +73,14 @@ const App: React.FC = () => {
         placeData.reviews, 
         placeData.totalCount, 
         placeData.rating,
-        tier === 'demo' // Pass isDemoMode flag
+        tier === 'demo'
       );
       setStats(analysis);
 
     } catch (err: any) {
       console.error(err);
       const msg = err.message || "Failed to load business data";
-      
-      if (msg.includes("CORS")) {
-          setErrorMsg("Browser Blocked Request. We are switching to JS API to fix this...");
-      } else {
-          setErrorMsg(`Error: ${msg}. Please check the Place ID.`);
-      }
+      setErrorMsg(msg); // This will now be shown in the UI
     } finally {
       setLoading(false);
     }
@@ -143,14 +129,13 @@ const App: React.FC = () => {
     setShowEmbedModal(true);
   };
   
-  // Regenerate code when tab switches
   useEffect(() => {
       if (showEmbedModal && stats) {
           handleGenerateCode();
       }
   }, [embedType]);
 
-  // --- RENDER: WIDGET MODE (Clean, for Iframe) ---
+  // --- RENDER: WIDGET MODE ---
   if (viewMode === 'widget') {
     return (
       <div className="min-h-screen bg-transparent font-sans p-4 flex items-center justify-center">
@@ -169,7 +154,7 @@ const App: React.FC = () => {
     );
   }
 
-  // --- RENDER: DASHBOARD MODE (Admin Console) ---
+  // --- RENDER: DASHBOARD MODE ---
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans flex flex-col">
       {/* Navbar */}
@@ -200,6 +185,14 @@ const App: React.FC = () => {
               <a href="https://developers.google.com/maps/documentation/places/web-service/place-id" target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">Find a Place ID here</a>.
             </p>
             
+            {/* ERROR BOX - Now visible in Dashboard */}
+            {errorMsg && (
+                <div className="bg-red-50 border-l-4 border-red-500 text-red-700 p-4 mb-6 rounded shadow-sm animate-pulse">
+                    <p className="font-bold">Connection Error:</p>
+                    <p className="text-sm">{errorMsg}</p>
+                </div>
+            )}
+            
             <form onSubmit={handleDashboardSubmit} className="space-y-6">
               <div className="flex gap-3">
                 <input 
@@ -220,7 +213,6 @@ const App: React.FC = () => {
 
               {/* Tier Selection Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Option 1: Standard */}
                 <label className={`border rounded-xl p-4 cursor-pointer transition-all ${connectionTier === 'demo' ? 'border-indigo-600 bg-indigo-50 ring-1 ring-indigo-600' : 'border-slate-200 hover:border-slate-300'}`}>
                   <div className="flex items-center gap-3 mb-2">
                     <input type="radio" name="tier" className="w-4 h-4 text-indigo-600" checked={connectionTier === 'demo'} onChange={() => setConnectionTier('demo')} />
@@ -229,7 +221,6 @@ const App: React.FC = () => {
                   <p className="text-xs text-slate-500">Uses the 5 most recent public reviews. AI generates a factual summary based strictly on this data.</p>
                 </label>
 
-                {/* Option 3: Live Pro */}
                 <label className={`border rounded-xl p-4 cursor-pointer transition-all ${connectionTier === 'live_pro' ? 'border-green-600 bg-green-50 ring-1 ring-green-600' : 'border-slate-200 hover:border-slate-300'}`}>
                   <div className="flex items-center gap-3 mb-2">
                     <input type="radio" name="tier" className="w-4 h-4 text-green-600" checked={connectionTier === 'live_pro'} onChange={() => setConnectionTier('live_pro')} />
@@ -239,7 +230,6 @@ const App: React.FC = () => {
                 </label>
               </div>
               
-              {/* Live Token Input (Conditional) */}
               {connectionTier === 'live_pro' && (
                 <div className="bg-green-50 p-4 rounded-lg border border-green-100 animate-fade-in">
                   <label className="block text-xs font-bold text-green-800 mb-1">Agency Access Token (OAuth)</label>
@@ -259,7 +249,6 @@ const App: React.FC = () => {
           {/* Preview Area */}
           {stats && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              {/* Left: Preview */}
               <div className="lg:col-span-2">
                 <div className="flex justify-between items-end mb-4">
                     <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest">Live Preview</h3>
@@ -275,7 +264,6 @@ const App: React.FC = () => {
                 <ReviewWidget stats={stats} loading={loading} profile={profile} />
               </div>
 
-              {/* Right: Actions */}
               <div className="space-y-4">
                 <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                    <h3 className="font-bold text-slate-800 mb-2">Ready to Deploy?</h3>
@@ -305,7 +293,6 @@ const App: React.FC = () => {
         </div>
       </main>
       
-      {/* Import Modal */}
       {showImportModal && (
           <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6">
@@ -325,14 +312,12 @@ const App: React.FC = () => {
           </div>
       )}
 
-      {/* Embed Modal */}
       {showEmbedModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full flex flex-col max-h-[90vh]">
             <div className="p-6 border-b border-slate-100">
               <h3 className="text-lg font-bold mb-4">Client Embed Code</h3>
               
-              {/* Tabs */}
               <div className="flex bg-slate-100 rounded-lg p-1 gap-1">
                   <button 
                     onClick={() => setEmbedType('static')}
