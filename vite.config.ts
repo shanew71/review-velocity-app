@@ -3,13 +3,14 @@ import react from '@vitejs/plugin-react';
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
-  // Load env file based on `mode` in the current working directory.
-  // Set the third parameter to '' to load all env regardless of the `VITE_` prefix.
-  const env = loadEnv(mode, process.cwd(), '');
+  const env = loadEnv(mode, '.', '');
   return {
     plugins: [react()],
+    root: '.', // Explicitly tell Vite the root is here, not in src/
+    build: {
+      outDir: 'dist',
+    },
     define: {
-      // This allows your code to access process.env.REACT_APP_... in the browser
       'process.env': env
     }
   };
