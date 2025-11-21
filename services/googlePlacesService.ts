@@ -1,89 +1,112 @@
-import { GooglePlaceResult, ReviewData, BusinessProfile } from "../types";
+
+import { ReviewData, BusinessProfile } from "../types";
 import { augmentReviews } from "./geminiService";
 
-const API_KEY = process.env.REACT_APP_GOOGLE_MAPS_KEY || process.env.API_KEY; 
+const API_KEY = process.env.REACT_APP_GOOGLE_MAPS_KEY || process.env.API_KEY;
+
+declare var google: any;
+
+/**
+ * Helper: Dynamically load the Google Maps Script if not already present
+ */
+const loadGoogleMapsScript = (): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    if ((window as any).google && (window as any).google.maps && (window as any).google.maps.places) {
+      resolve();
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${API_KEY}&libraries=places`;
+    script.async = true;
+    script.defer = true;
+    script.onload = () => resolve();
+    script.onerror = (e) => reject(e);
+    document.head.appendChild(script);
+  });
+};
 
 /**
  * REAL PRODUCTION FUNCTION for fetching private GBP Data
  */
 const fetchReviewsFromGBP = async (placeId: string, accessToken: string): Promise<ReviewData[]> => {
     console.log("Fetching from PRIVATE Google Business Profile API...");
+    // NOTE: This fetch will strictly likely fail CORS if called from browser too, 
+    // but since you are likely testing this part manually, we leave it structured.
+    // In a pure browser app, you usually need a proxy for the 'mybusiness' API specifically.
     console.log(`[System] Call to https://mybusiness.googleapis.com/v4/.../reviews?pageSize=25`);
     return []; 
 }
 
 export const fetchGooglePlaceData = async (placeId: string, tier: 'standard' | 'pro' | 'live_pro' | 'demo' = 'standard', token?: string): Promise<{ profile: BusinessProfile, reviews: ReviewData[], totalCount: number, rating: number }> => {
   
-  const fields = 'place_id,name,formatted_address,user_ratings_total,rating,reviews,website,formatted_phone_number,types';
-  
-  try {
-     if (!API_KEY) throw new Error("Google Maps API Key missing");
+  // 1. Load the Script
+  if (!API_KEY) throw new Error("Google Maps API Key missing");
+  await loadGoogleMapsScript();
 
-     const baseUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=${fields}&key=${API_KEY}`;
-     
-     let data: any;
-     try {
-        const response = await fetch(baseUrl);
-        data = await response.json();
-     } catch (e) {
-        console.warn("CORS blocked direct Google API call. Use a Proxy.");
-        throw new Error("CORS_ERROR");
-     }
+  // 2. Use the PlacesService (Official Client-Side Method)
+  return new Promise((resolve, reject) => {
+    const mapDiv = document.createElement('div'); // Dummy div required for service
+    const service = new google.maps.places.PlacesService(mapDiv);
 
-     if (!data.result) {
-       throw new Error(data.error_message || "Failed to find place");
-     }
+    const request = {
+      placeId: placeId,
+      fields: ['name', 'formatted_address', 'formatted_phone_number', 'website', 'rating', 'user_ratings_total', 'reviews', 'types', 'place_id']
+    };
 
-     const result: GooglePlaceResult = data.result;
+    service.getDetails(request, async (place: any, status: any) => {
+      if (status !== google.maps.places.PlacesServiceStatus.OK) {
+        console.error("Google Maps API Error:", status);
+        reject(new Error(`Google Maps API Error: ${status}`));
+        return;
+      }
 
-     const profile: BusinessProfile = {
-        name: result.name,
-        url: result.website || `https://www.google.com/maps/place/?q=place_id:${result.place_id}`,
-        description: `${result.name} is a local business located in ${result.formatted_address}.`,
-        logoUrl: `https://ui-avatars.com/api/?name=${result.name.replace(/ /g, '+')}&background=random`,
-        address: result.formatted_address,
-        telephone: result.formatted_phone_number,
-        googlePlaceId: result.place_id,
-        categories: (data.result as any).types || [] 
-     };
+      // 3. Map the Data
+      try {
+          const profile: BusinessProfile = {
+            name: place.name,
+            url: place.website || `https://www.google.com/maps/place/?q=place_id:${place.place_id}`,
+            description: `${place.name} is a local business located in ${place.formatted_address}.`,
+            logoUrl: `https://ui-avatars.com/api/?name=${place.name.replace(/ /g, '+')}&background=random`,
+            address: place.formatted_address,
+            telephone: place.formatted_phone_number,
+            googlePlaceId: place.place_id,
+            categories: place.types || []
+          };
 
-     let reviews: ReviewData[] = (result.reviews || []).map((r, idx) => ({
-        id: `g-${idx}-${Date.now()}`,
-        author: r.author_name,
-        rating: r.rating,
-        text: r.text,
-        date: new Date(r.time * 1000).toISOString(),
-        source: 'Google'
-     }));
+          let reviews: ReviewData[] = (place.reviews || []).map((r: any, idx: number) => ({
+            id: `g-${idx}-${Date.now()}`,
+            author: r.author_name,
+            rating: r.rating,
+            text: r.text,
+            date: new Date(r.time * 1000).toISOString(),
+            source: 'Google'
+          }));
 
-     // LOGIC TREE:
-     if (tier === 'live_pro') {
-        if (token) {
-             console.log(`[LIVE PRO] Token provided. Fetching real private history...`);
-             // In production: const realDeepReviews = await fetchReviewsFromGBP(placeId, token);
-             // reviews = realDeepReviews;
-             
-             // For UI verification of logic flow:
-             try {
-                const augmented = await augmentReviews(reviews, result.name);
-                reviews = [...reviews, ...augmented.map(r => ({...r, source: 'Google' as const}))]; 
-             } catch(e) {}
-        } else {
-             console.log("[LIVE PRO] No token provided. Falling back to public 5.");
-        }
-     } else if (tier === 'demo' && reviews.length > 0) {
-        // Demo Mode: Do not augment reviews. Allow Gemini "Sales Vision Mode" to infer details.
-     }
+          // LOGIC TREE:
+          if (tier === 'live_pro') {
+              if (token) {
+                  console.log(`[LIVE PRO] Token provided. Fetching real private history...`);
+                  // Mock logic for private fetch
+                  try {
+                      const augmented = await augmentReviews(reviews, place.name);
+                      reviews = [...reviews, ...augmented.map(r => ({...r, source: 'Google' as const}))]; 
+                  } catch(e) {}
+              } else {
+                  console.log("[LIVE PRO] No token provided. Falling back to public 5.");
+              }
+          } 
 
-     return {
-        profile,
-        reviews, 
-        totalCount: result.user_ratings_total,
-        rating: result.rating
-     };
+          resolve({
+            profile,
+            reviews,
+            totalCount: place.user_ratings_total || 0,
+            rating: place.rating || 0
+          });
 
-  } catch (error) {
-    console.error("Google Places Fetch Error:", error);
-    throw error;
-  }
+      } catch (err) {
+          reject(err);
+      }
+    });
+  });
 };
