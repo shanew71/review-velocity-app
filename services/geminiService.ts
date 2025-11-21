@@ -115,14 +115,15 @@ const runGeminiAnalysis = async (reviews: ReviewData[], total: number, avg: numb
 
   if (isDemoMode) {
       instruction = `
-        **SALES VISION MODE ENABLED**
-        The user is auditing this business. The provided reviews are only the most recent 5.
-        Your goal is to paint a picture of what their reputation looks like.
+        **AUDIT MODE (REAL DATA)**
+        The user is auditing this business using public data (The Latest 5 Reviews).
         
-        1. Infer likely services based on the business category and limited text.
-        2. Write a high-energy, comprehensive "AI Overview" that demonstrates the potential of this tool.
-        3. Use phrases like "Consistently high-rated..." and "Customers frequently praise..." to show the vision.
-        4. Fill in gaps with industry-standard positive traits for this business type.
+        1. Analyze ONLY the provided 5 reviews. 
+        2. Identify services actually mentioned in the text.
+        3. Write a professional "AI Overview" summarizing the sentiment of these recent customers.
+        4. Do NOT invent or infer services not explicitly stated. 
+        5. If the reviews are negative, reflect that constructively. If positive, highlight why.
+        6. Be concise.
       `;
   }
 
