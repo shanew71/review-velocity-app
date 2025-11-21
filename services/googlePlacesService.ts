@@ -17,10 +17,10 @@ const loadGoogleMapsScript = (): Promise<void> => {
       return;
     }
 
-    // TIMEOUT: If script doesn't load in 5 seconds, fail.
+    // TIMEOUT: If script doesn't load in 8 seconds, fail.
     const timeoutId = setTimeout(() => {
-        reject(new Error("Google Maps Script load timed out. Check internet or API Key."));
-    }, 5000);
+        reject(new Error("Google Maps Script load timed out. Check internet or API Key restriction."));
+    }, 8000);
 
     const script = document.createElement('script');
     script.src = `https://maps.googleapis.com/maps/api/js?key=${API_KEY}&libraries=places`;
@@ -71,9 +71,8 @@ const resolveToPlaceId = (input: string, service: any): Promise<string> => {
                 console.log("Found Place ID:", results[0].place_id);
                 resolve(results[0].place_id);
             } else {
-                // Pass the exact status back so we know why it failed
                 console.error("Search failed:", status);
-                reject(new Error(`Could not find business "${input}". Google Status: ${status}`));
+                reject(new Error(`Could not find business "${input}". Try the exact Place ID.`));
             }
         });
     });
@@ -92,7 +91,7 @@ export const fetchGooglePlaceData = async (input: string, tier: 'standard' | 'pr
     const service = new google.maps.places.PlacesService(mapDiv);
 
     try {
-        // 3. Resolve Input -> Place ID
+        // 3. Resolve Input -> Place ID (This fixes the Name Search)
         const placeId = await resolveToPlaceId(input, service);
 
         // 4. Get Details using the resolved ID
@@ -101,10 +100,10 @@ export const fetchGooglePlaceData = async (input: string, tier: 'standard' | 'pr
           fields: ['name', 'formatted_address', 'formatted_phone_number', 'website', 'rating', 'user_ratings_total', 'reviews', 'types', 'place_id']
         };
 
-        // TIMEOUT: If API doesn't respond in 8 seconds, fail.
+        // TIMEOUT: If API doesn't respond in 10 seconds, fail.
         const apiTimeout = setTimeout(() => {
             reject(new Error("Google API Request timed out."));
-        }, 8000);
+        }, 10000);
 
         service.getDetails(request, async (place: any, status: any) => {
           clearTimeout(apiTimeout);
