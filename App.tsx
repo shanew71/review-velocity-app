@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { ReviewWidget } from './components/ReviewWidget';
 import { SchemaMarkup } from './components/SchemaMarkup';
@@ -24,7 +25,7 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   
   // Config State
-  // 'demo' = Sales/Audit Mode (5 Reviews + Exaggerated Vision)
+  // 'demo' = Standard Audit (Public 5 Reviews)
   // 'live_pro' = Client Mode (Real 25 Reviews via Token)
   const [connectionTier, setConnectionTier] = useState<'demo' | 'live_pro'>('demo');
   
@@ -64,25 +65,14 @@ const App: React.FC = () => {
   const loadPlaceData = async (placeId: string, tier: 'demo' | 'live_pro', token?: string) => {
     setLoading(true);
     setErrorMsg(null);
+    
+    // Clear previous data slightly to indicate refresh
+    setStats(null);
+
     try {
-      let placeData;
-      try {
-         // In a real app, the 'tier' would determine which API endpoint (Public vs OAuth) is called.
-         placeData = await fetchGooglePlaceData(placeId, tier, token);
-      } catch (e) {
-         if (viewMode === 'dashboard') {
-            // For Demo/Dashboard purposes, allow fallback
-            const sim = await generateBusinessData("Demo Place");
-            placeData = { 
-               profile: { ...sim.profile, googlePlaceId: placeId }, 
-               reviews: sim.reviews, 
-               totalCount: 124, 
-               rating: 4.8 
-            };
-         } else {
-            throw e;
-         }
-      }
+      // We intentionally removed the try/catch fallback block. 
+      // If the API fails, we want to see the REAL error, not the Demo Data.
+      const placeData = await fetchGooglePlaceData(placeId, tier, token);
 
       setProfile(placeData.profile);
       setReviews(placeData.reviews);
@@ -96,9 +86,15 @@ const App: React.FC = () => {
       );
       setStats(analysis);
 
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setErrorMsg("Failed to load business data. Check Place ID.");
+      const msg = err.message || "Failed to load business data";
+      
+      if (msg.includes("CORS")) {
+          setErrorMsg("Browser Blocked Request. We are switching to JS API to fix this...");
+      } else {
+          setErrorMsg(`Error: ${msg}. Please check the Place ID.`);
+      }
     } finally {
       setLoading(false);
     }
@@ -228,16 +224,16 @@ const App: React.FC = () => {
                 <label className={`border rounded-xl p-4 cursor-pointer transition-all ${connectionTier === 'demo' ? 'border-indigo-600 bg-indigo-50 ring-1 ring-indigo-600' : 'border-slate-200 hover:border-slate-300'}`}>
                   <div className="flex items-center gap-3 mb-2">
                     <input type="radio" name="tier" className="w-4 h-4 text-indigo-600" checked={connectionTier === 'demo'} onChange={() => setConnectionTier('demo')} />
-                    <span className="font-bold text-sm text-slate-800">1. Demo (Sales Vision)</span>
+                    <span className="font-bold text-sm text-slate-800">1. Standard (Public Audit)</span>
                   </div>
-                  <p className="text-xs text-slate-500">Uses public data (5 reviews). AI fills in the gaps based on Business Category to sell the vision.</p>
+                  <p className="text-xs text-slate-500">Uses the 5 most recent public reviews. AI generates a factual summary based strictly on this data.</p>
                 </label>
 
                 {/* Option 3: Live Pro */}
                 <label className={`border rounded-xl p-4 cursor-pointer transition-all ${connectionTier === 'live_pro' ? 'border-green-600 bg-green-50 ring-1 ring-green-600' : 'border-slate-200 hover:border-slate-300'}`}>
                   <div className="flex items-center gap-3 mb-2">
                     <input type="radio" name="tier" className="w-4 h-4 text-green-600" checked={connectionTier === 'live_pro'} onChange={() => setConnectionTier('live_pro')} />
-                    <span className="font-bold text-sm text-green-700">2. Client (Real Live Data)</span>
+                    <span className="font-bold text-sm text-green-700">2. Client (Real 25 Reviews)</span>
                   </div>
                   <p className="text-xs text-slate-500">Connects to your Google Account (GBP) to fetch 25 recent reviews.</p>
                 </label>
@@ -269,7 +265,7 @@ const App: React.FC = () => {
                     <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest">Live Preview</h3>
                     <div className="flex gap-2">
                         {connectionTier === 'demo' && (
-                            <span className="text-[10px] text-white bg-indigo-600 px-2 py-1 rounded font-bold">DEMO / VISION MODE</span>
+                            <span className="text-[10px] text-white bg-indigo-600 px-2 py-1 rounded font-bold">STANDARD AUDIT</span>
                         )}
                         {connectionTier === 'live_pro' && (
                             <span className="text-[10px] text-white bg-green-600 px-2 py-1 rounded font-bold">LIVE CLIENT DATA</span>
