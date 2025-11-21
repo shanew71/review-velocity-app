@@ -71,6 +71,7 @@ const resolveToPlaceId = (input: string, service: any): Promise<string> => {
                 console.log("Found Place ID:", results[0].place_id);
                 resolve(results[0].place_id);
             } else {
+                // Pass the exact status back so we know why it failed
                 console.error("Search failed:", status);
                 reject(new Error(`Could not find business "${input}". Try the exact Place ID.`));
             }
