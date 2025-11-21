@@ -10,35 +10,26 @@ const INITIAL_PROFILE: BusinessProfile = {
   name: "Connect Your Business",
   url: "#",
   logoUrl: "https://ui-avatars.com/api/?name=RV",
-  description: "Enter a Google Place ID to generate live intelligence.",
+  description: "Enter a Business Name or Place ID to generate live intelligence.",
 };
 
 const App: React.FC = () => {
-  // View Mode State
   const [viewMode, setViewMode] = useState<ViewMode>('dashboard');
-  
-  // Data State
   const [profile, setProfile] = useState<BusinessProfile>(INITIAL_PROFILE);
   const [reviews, setReviews] = useState<ReviewData[]>([]);
   const [stats, setStats] = useState<BusinessStats | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
-  
-  // Config State
   const [connectionTier, setConnectionTier] = useState<'demo' | 'live_pro'>('demo');
   
-  // Input State
   const [placeIdInput, setPlaceIdInput] = useState('');
-  const [gbpToken, setGbpToken] = useState(''); // For Real Live Data
+  const [gbpToken, setGbpToken] = useState(''); 
   const [embedCode, setEmbedCode] = useState('');
   const [embedType, setEmbedType] = useState<'static' | 'live'>('static');
   const [showEmbedModal, setShowEmbedModal] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  
-  // Manual Text Import State
   const [showImportModal, setShowImportModal] = useState(false);
   const [rawReviewText, setRawReviewText] = useState('');
 
-  // 1. Router Logic (On Mount)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const modeParam = params.get('mode');
@@ -56,20 +47,20 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // 2. Load Data
-  const loadPlaceData = async (placeId: string, tier: 'demo' | 'live_pro', token?: string) => {
+  const loadPlaceData = async (input: string, tier: 'demo' | 'live_pro', token?: string) => {
     setLoading(true);
     setErrorMsg(null);
     setStats(null);
 
     try {
-      const placeData = await fetchGooglePlaceData(placeId, tier, token);
+      // Input can now be Name, Link, or ID
+      const placeData = await fetchGooglePlaceData(input, tier, token);
 
       setProfile(placeData.profile);
       setReviews(placeData.reviews);
 
       const analysis = await getSmartAnalysis(
-        placeId, 
+        placeData.profile.googlePlaceId || "unknown", 
         placeData.reviews, 
         placeData.totalCount, 
         placeData.rating,
@@ -80,7 +71,7 @@ const App: React.FC = () => {
     } catch (err: any) {
       console.error(err);
       const msg = err.message || "Failed to load business data";
-      setErrorMsg(msg); // This will now be shown in the UI
+      setErrorMsg(msg);
     } finally {
       setLoading(false);
     }
@@ -117,7 +108,7 @@ const App: React.FC = () => {
 
   const handleGenerateCode = () => {
     if (!stats) return;
-    const profileWithId = { ...profile, googlePlaceId: placeIdInput || profile.googlePlaceId };
+    const profileWithId = { ...profile, googlePlaceId: profile.googlePlaceId || placeIdInput };
     
     let code = '';
     if (embedType === 'static') {
@@ -135,7 +126,6 @@ const App: React.FC = () => {
       }
   }, [embedType]);
 
-  // --- RENDER: WIDGET MODE ---
   if (viewMode === 'widget') {
     return (
       <div className="min-h-screen bg-transparent font-sans p-4 flex items-center justify-center">
@@ -154,10 +144,8 @@ const App: React.FC = () => {
     );
   }
 
-  // --- RENDER: DASHBOARD MODE ---
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans flex flex-col">
-      {/* Navbar */}
       <div className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
            <div className="flex items-center gap-2">
@@ -176,16 +164,12 @@ const App: React.FC = () => {
       <main className="flex-grow container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto">
           
-          {/* Setup Card */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 mb-8">
             <h1 className="text-2xl font-bold text-slate-900 mb-4">Configure Client Widget</h1>
             <p className="text-slate-500 mb-6 text-sm">
-              Enter the client's <strong>Google Place ID</strong> to begin.
-              <br/>
-              <a href="https://developers.google.com/maps/documentation/places/web-service/place-id" target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">Find a Place ID here</a>.
+              Enter the client's <strong>Business Name</strong> or <strong>Place ID</strong> to begin.
             </p>
             
-            {/* ERROR BOX - Now visible in Dashboard */}
             {errorMsg && (
                 <div className="bg-red-50 border-l-4 border-red-500 text-red-700 p-4 mb-6 rounded shadow-sm animate-pulse">
                     <p className="font-bold">Connection Error:</p>
@@ -197,7 +181,7 @@ const App: React.FC = () => {
               <div className="flex gap-3">
                 <input 
                   type="text" 
-                  placeholder="Ex: ChIJN1t_tDeuEmsRUsoyG83frY4" 
+                  placeholder="Ex: Noble Dental Remuera OR ChIJ..." 
                   className="flex-1 border border-slate-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-indigo-500 focus:outline-none font-mono text-sm"
                   value={placeIdInput}
                   onChange={(e) => setPlaceIdInput(e.target.value)}
@@ -207,11 +191,10 @@ const App: React.FC = () => {
                   disabled={loading}
                   className={`text-white px-6 py-3 rounded-lg font-bold transition-colors disabled:opacity-50 ${connectionTier === 'live_pro' ? 'bg-green-600 hover:bg-green-700' : 'bg-indigo-600 hover:bg-indigo-700'}`}
                 >
-                  {loading ? 'Fetching...' : 'Connect'}
+                  {loading ? 'Searching...' : 'Connect'}
                 </button>
               </div>
 
-              {/* Tier Selection Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <label className={`border rounded-xl p-4 cursor-pointer transition-all ${connectionTier === 'demo' ? 'border-indigo-600 bg-indigo-50 ring-1 ring-indigo-600' : 'border-slate-200 hover:border-slate-300'}`}>
                   <div className="flex items-center gap-3 mb-2">
@@ -246,7 +229,6 @@ const App: React.FC = () => {
             </form>
           </div>
 
-          {/* Preview Area */}
           {stats && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               <div className="lg:col-span-2">
@@ -317,7 +299,6 @@ const App: React.FC = () => {
           <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full flex flex-col max-h-[90vh]">
             <div className="p-6 border-b border-slate-100">
               <h3 className="text-lg font-bold mb-4">Client Embed Code</h3>
-              
               <div className="flex bg-slate-100 rounded-lg p-1 gap-1">
                   <button 
                     onClick={() => setEmbedType('static')}
@@ -332,7 +313,6 @@ const App: React.FC = () => {
                       🔴 Live Auto-Pilot (Requires Deployment)
                   </button>
               </div>
-              
               <p className="mt-4 text-xs text-slate-500">
                   {embedType === 'static' 
                     ? "Generates a standalone HTML block with current data. Does not call any API. Update monthly."
@@ -360,7 +340,6 @@ const App: React.FC = () => {
           </div>
         </div>
       )}
-
     </div>
   );
 };
