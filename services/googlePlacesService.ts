@@ -11,10 +11,16 @@ declare var google: any;
  */
 const loadGoogleMapsScript = (): Promise<void> => {
   return new Promise((resolve, reject) => {
+    // If already loaded, success
     if ((window as any).google && (window as any).google.maps && (window as any).google.maps.places) {
       resolve();
       return;
     }
+
+    // TIMEOUT: If script doesn't load in 5 seconds, fail.
+    const timeoutId = setTimeout(() => {
+        reject(new Error("Google Maps Script load timed out. Check internet or API Key."));
+    }, 5000);
 
     const script = document.createElement('script');
     script.src = `https://maps.googleapis.com/maps/api/js?key=${API_KEY}&libraries=places`;
@@ -22,18 +28,19 @@ const loadGoogleMapsScript = (): Promise<void> => {
     script.defer = true;
     
     script.onload = () => {
-        // Give it a tiny buffer to initialize
+        clearTimeout(timeoutId);
         setTimeout(() => {
             if ((window as any).google && (window as any).google.maps) {
                 resolve();
             } else {
-                reject(new Error("Google Maps script loaded but failed to initialize."));
+                reject(new Error("Google Maps script loaded but 'google' object is missing."));
             }
         }, 100);
     };
     
     script.onerror = () => {
-        reject(new Error("Failed to load Google Maps script. Check API Key restriction."));
+        clearTimeout(timeoutId);
+        reject(new Error("Failed to load Google Maps script. API Key might be invalid or blocked."));
     };
 
     document.head.appendChild(script);
@@ -47,8 +54,8 @@ const loadGoogleMapsScript = (): Promise<void> => {
 const resolveToPlaceId = (input: string, service: any): Promise<string> => {
     return new Promise((resolve, reject) => {
         // 1. If it looks like a Place ID (starts with ChIJ), use it directly
-        if (input.startsWith('ChIJ')) {
-            resolve(input);
+        if (input.trim().startsWith('ChIJ')) {
+            resolve(input.trim());
             return;
         }
 
@@ -64,8 +71,9 @@ const resolveToPlaceId = (input: string, service: any): Promise<string> => {
                 console.log("Found Place ID:", results[0].place_id);
                 resolve(results[0].place_id);
             } else {
+                // Pass the exact status back so we know why it failed
                 console.error("Search failed:", status);
-                reject(new Error(`Could not find a business named "${input}". Try the exact Place ID.`));
+                reject(new Error(`Could not find business "${input}". Google Status: ${status}`));
             }
         });
     });
@@ -93,11 +101,17 @@ export const fetchGooglePlaceData = async (input: string, tier: 'standard' | 'pr
           fields: ['name', 'formatted_address', 'formatted_phone_number', 'website', 'rating', 'user_ratings_total', 'reviews', 'types', 'place_id']
         };
 
+        // TIMEOUT: If API doesn't respond in 8 seconds, fail.
+        const apiTimeout = setTimeout(() => {
+            reject(new Error("Google API Request timed out."));
+        }, 8000);
+
         service.getDetails(request, async (place: any, status: any) => {
+          clearTimeout(apiTimeout);
+
           if (status !== google.maps.places.PlacesServiceStatus.OK) {
-            // Specific error handling
-            if (status === 'ZERO_RESULTS') reject(new Error("Place ID not found."));
-            else if (status === 'REQUEST_DENIED') reject(new Error("API Key Rejected. Check Google Cloud Console settings."));
+            if (status === 'ZERO_RESULTS') reject(new Error("Place ID not found in Google Database."));
+            else if (status === 'REQUEST_DENIED') reject(new Error("API Key Rejected. Check Google Cloud Console."));
             else reject(new Error(`Google Maps API Error: ${status}`));
             return;
           }
