@@ -14,15 +14,11 @@ const INITIAL_PROFILE: BusinessProfile = {
 };
 
 const App: React.FC = () => {
-  // View Mode State
   const [viewMode, setViewMode] = useState<ViewMode>('dashboard');
-  
-  // Data State
   const [profile, setProfile] = useState<BusinessProfile>(INITIAL_PROFILE);
   const [reviews, setReviews] = useState<ReviewData[]>([]);
   const [stats, setStats] = useState<BusinessStats | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
-  
   const [connectionTier, setConnectionTier] = useState<'demo' | 'live_pro'>('demo');
   
   const [placeIdInput, setPlaceIdInput] = useState('');
@@ -31,7 +27,6 @@ const App: React.FC = () => {
   const [embedType, setEmbedType] = useState<'static' | 'live'>('static');
   const [showEmbedModal, setShowEmbedModal] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  
   const [showImportModal, setShowImportModal] = useState(false);
   const [rawReviewText, setRawReviewText] = useState('');
 
@@ -58,6 +53,7 @@ const App: React.FC = () => {
     setStats(null);
 
     try {
+      // Input can now be Name, Link, or ID
       const placeData = await fetchGooglePlaceData(input, tier, token);
 
       setProfile(placeData.profile);
@@ -177,8 +173,6 @@ const App: React.FC = () => {
             <h1 className="text-2xl font-bold text-slate-900 mb-4">Configure Client Widget</h1>
             <p className="text-slate-500 mb-6 text-sm">
               Enter the client's <strong>Business Name</strong> or <strong>Place ID</strong> to begin.
-              <br/>
-              <a href="https://developers.google.com/maps/documentation/places/web-service/place-id" target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">Find a Place ID here</a>.
             </p>
             
             {errorMsg && (
