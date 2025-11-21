@@ -14,22 +14,31 @@ const INITIAL_PROFILE: BusinessProfile = {
 };
 
 const App: React.FC = () => {
+  // View Mode State
   const [viewMode, setViewMode] = useState<ViewMode>('dashboard');
+  
+  // Data State
   const [profile, setProfile] = useState<BusinessProfile>(INITIAL_PROFILE);
   const [reviews, setReviews] = useState<ReviewData[]>([]);
   const [stats, setStats] = useState<BusinessStats | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
+  
+  // Config State
   const [connectionTier, setConnectionTier] = useState<'demo' | 'live_pro'>('demo');
   
+  // Input State
   const [placeIdInput, setPlaceIdInput] = useState('');
-  const [gbpToken, setGbpToken] = useState(''); 
+  const [gbpToken, setGbpToken] = useState(''); // For Real Live Data
   const [embedCode, setEmbedCode] = useState('');
   const [embedType, setEmbedType] = useState<'static' | 'live'>('static');
   const [showEmbedModal, setShowEmbedModal] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  
+  // Manual Text Import State
   const [showImportModal, setShowImportModal] = useState(false);
   const [rawReviewText, setRawReviewText] = useState('');
 
+  // 1. Router Logic (On Mount)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const modeParam = params.get('mode');
@@ -47,14 +56,14 @@ const App: React.FC = () => {
     }
   }, []);
 
-  const loadPlaceData = async (input: string, tier: 'demo' | 'live_pro', token?: string) => {
+  // 2. Load Data
+  const loadPlaceData = async (placeId: string, tier: 'demo' | 'live_pro', token?: string) => {
     setLoading(true);
     setErrorMsg(null);
     setStats(null);
 
     try {
-      // Input can now be Name, Link, or ID
-      const placeData = await fetchGooglePlaceData(input, tier, token);
+      const placeData = await fetchGooglePlaceData(placeId, tier, token);
 
       setProfile(placeData.profile);
       setReviews(placeData.reviews);
@@ -172,7 +181,9 @@ const App: React.FC = () => {
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 mb-8">
             <h1 className="text-2xl font-bold text-slate-900 mb-4">Configure Client Widget</h1>
             <p className="text-slate-500 mb-6 text-sm">
-              Enter the client's <strong>Business Name</strong> or <strong>Place ID</strong> to begin.
+              Enter the client's <strong>Google Place ID</strong> to begin.
+              <br/>
+              <a href="https://developers.google.com/maps/documentation/places/web-service/place-id" target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">Find a Place ID here</a>.
             </p>
             
             {errorMsg && (
@@ -186,7 +197,7 @@ const App: React.FC = () => {
               <div className="flex gap-3">
                 <input 
                   type="text" 
-                  placeholder="Ex: Noble Dental Remuera OR ChIJ..." 
+                  placeholder="Ex: ChIJN1t_tDeuEmsRUsoyG83frY4" 
                   className="flex-1 border border-slate-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-indigo-500 focus:outline-none font-mono text-sm"
                   value={placeIdInput}
                   onChange={(e) => setPlaceIdInput(e.target.value)}
@@ -196,7 +207,7 @@ const App: React.FC = () => {
                   disabled={loading}
                   className={`text-white px-6 py-3 rounded-lg font-bold transition-colors disabled:opacity-50 ${connectionTier === 'live_pro' ? 'bg-green-600 hover:bg-green-700' : 'bg-indigo-600 hover:bg-indigo-700'}`}
                 >
-                  {loading ? 'Searching...' : 'Connect'}
+                  {loading ? 'Connect' : 'Connect'}
                 </button>
               </div>
 
